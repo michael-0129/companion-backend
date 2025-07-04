@@ -1,6 +1,4 @@
 import uvicorn
-from app.core.config import settings # To potentially use settings for host/port if defined
-
 if __name__ == "__main__":
     # It's good practice to load .env before app import if settings aren't fully initialized
     # However, Pydantic settings should handle .env loading upon instantiation.

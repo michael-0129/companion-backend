@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Integer, JSON, Float, ForeignKey, func, Index, Date
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, JSON, ForeignKey, func, Index, Date
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
 from pgvector.sqlalchemy import VECTOR
 import uuid

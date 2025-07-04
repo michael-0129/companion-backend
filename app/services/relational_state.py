@@ -11,12 +11,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import cast, String
 from datetime import datetime
 from app.models import CodexEntry
-from app.services.memory import create_codex_entry, get_codex_entry
 from app.schemas import CodexEntryCreate
 from uuid import UUID
 from app.core.config import TIMEZONE
 from zoneinfo import ZoneInfo
-
+from app.services.memory import create_codex_entry
 logger = logging.getLogger(__name__)
 
 # Constants for CodexEntry type and tags

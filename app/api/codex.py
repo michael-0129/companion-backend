@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app import schemas
@@ -7,9 +7,8 @@ from app.core.config import settings
 from app.services import memory
 from app.utils.security import decrypt_content
 from uuid import UUID
-from typing import List, Optional, Any, Dict
-import json # Added for potential use in new endpoints or schema handling
-from app.services.codex_service import create_codex_entry
+from typing import List, Optional
+from app.services.memory import create_codex_entry
 from app.models import CodexEntry as models
 
 router = APIRouter()

@@ -7,17 +7,17 @@ such as activating or deactivating silence mode.
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, Tuple, Callable, Coroutine
 from uuid import UUID
-from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from app.core.config import TIMEZONE
 
 from app import schemas
 from app.core.logging_config import get_logger
-from app.services.memory import create_protocol_event, deactivate_protocol_event, get_active_protocol_event
+from app.services.protocol import create_protocol_event, deactivate_protocol_event, get_active_protocol_event, list_protocol_events
 from .intent_registry import intent_handler_registry
 from app.core.exceptions import CommandExecutionError
 from app.services.archive_service import ArchiveService
 from app.services import relational_state  # Import the relational state module
+from app.utils.llm_provider import get_llm_provider
 
 logger = get_logger(__name__)
 
@@ -184,14 +184,15 @@ async def handle_command_intent(
 
     logger.info(f"[COMMAND HANDLER] Final command_name to execute: '{command_name}' with params: {command_params}")
 
-    if not command_name:
-        err = "No 'command_name' provided for COMMAND intent."
-        return "I understood this as a command, but not which one.", None, err
+    if not command_name or command_name not in COMMAND_REGISTRY:
+        # Store as protocol event (directive)
+        await _store_directive_protocol_event(db, user_query, command_name, command_params, context_snapshot)
+        return "Received, Michael. Directive stored.", None, None
 
     command_func = COMMAND_REGISTRY.get(command_name)
-    if not command_func:
-        err = f"Unknown command '{command_name}'."
-        return f"This command is not within my current domain of action.", None, err
+    print("-"*20)
+    print(command_name)
+    print("-"*20)
 
     logger.info(f"Executing command: '{command_name}' with params: {command_params}")
     try:
@@ -217,4 +218,50 @@ async def handle_command_intent(
         companion_response_content = "A critical error interrupted the command."
     # Note: If you add more protocol commands, follow this pattern for user feedback and logging.
     logger.info(f"[COMMAND HANDLER] About to return companion_response_content: '{companion_response_content}'")
-    return companion_response_content, None, llm_call_error_updated 
+    return companion_response_content, None, llm_call_error_updated
+
+# --- Helper for protocol event creation for directives ---
+async def _store_directive_protocol_event(db, user_query, command_name, command_params, context_snapshot):
+    from app import schemas
+    from app.services.protocol import create_protocol_event, list_protocol_events
+    MAX_DIRECTIVE_TOKENS = 70
+    previous_directives = list_protocol_events(db, event_type="directive", active=True)
+    current_directive = previous_directives[0].details.get("directive_content") if previous_directives else ""
+    new_directive = user_query.strip()
+    # LLM-based synthesis prompt with keyword preservation
+    synthesis_prompt = f"""
+You are the protocol directive synthesizer for the Master Companion AI.
+Here is the current active directive:
+"{current_directive}"
+A new directive has been received:
+"{new_directive}"
+Your task:
+- Merge, update, or override as needed to produce a single, protocol-aligned directive that incorporates all relevant instructions and resolves any conflicts.
+- Do not simply concatenate. Synthesize, compress, and clarify.
+- PRESERVE all important keywords, concepts, and constraints from both directives. Do not omit or lose any critical instruction.
+- If the new directive contradicts or supersedes part of the previous directive, update or replace only that part.
+- If both directives can coexist, merge them efficiently.
+- The result must be a single, clear, protocol-aligned directive, no more than {MAX_DIRECTIVE_TOKENS} tokens.
+- Output only the updated directive, nothing else.
+"""
+    llm = get_llm_provider()
+    messages = [
+        {"role": "system", "content": synthesis_prompt}
+    ]
+    synthesized_directive = await llm.generate(messages, max_tokens=MAX_DIRECTIVE_TOKENS, temperature=0.0)
+    # Update the existing protocol event if present, else create new
+    if previous_directives:
+        directive_event = previous_directives[0]
+        directive_event.details["directive_content"] = synthesized_directive.strip()
+        directive_event.active = True
+        db.commit()
+        db.refresh(directive_event)
+    else:
+        event_schema = schemas.ProtocolEventCreate(
+            event_type="directive",
+            details={
+                "directive_content": synthesized_directive.strip()
+            },
+            active=True
+        )
+        create_protocol_event(db, event_schema) 

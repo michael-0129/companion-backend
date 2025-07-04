@@ -13,8 +13,8 @@ and maintains its own document storage and processing logic.
 """
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
-from typing import List, Optional, Dict, Any, Tuple
+from sqlalchemy import func
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 import aiofiles
@@ -31,7 +31,7 @@ from app.db.session import get_db
 from app.core.config import settings
 from app.core.logging_config import get_logger
 from app.core.exceptions import DocumentProcessingError
-from app.services.codex_service import create_codex_entry
+from app.services.memory import create_codex_entry
 from app.utils.llm_provider import get_llm_provider
 
 logger = get_logger(__name__)

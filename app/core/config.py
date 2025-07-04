@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 import os
 from dotenv import load_dotenv
 
@@ -16,13 +15,13 @@ class Settings(BaseSettings):
 
     # LLM Provider Configuration (vLLM/OpenAI-compatible only)
     LLM_PROVIDER: str = os.getenv('LLM_PROVIDER', 'vllm')  # e.g., 'vllm', 'openai'
-    VLLM_API_URL: str = os.getenv('VLLM_API_URL', 'http://localhost:8080')
-    VLLM_MODEL: str = os.getenv('VLLM_MODEL', 'llama3.1-8b')
-    VLLM_MAX_TOKENS: int = int(os.getenv('VLLM_MAX_TOKENS', 4096))
+    VLLM_API_URL: str = os.getenv('VLLM_API_URL', 'https://d86a-216-81-245-127.ngrok-free.app')
+    VLLM_MODEL: str = os.getenv('VLLM_MODEL', 'llama-3.3-70b-instruct-awq')
+    VLLM_MAX_TOKENS: int = int(os.getenv('VLLM_MAX_TOKENS', 8192))
     VLLM_TEMPERATURE: float = float(os.getenv('VLLM_TEMPERATURE', 0.7))
 
     # New: Separate input/output token limits
-    VLLM_MAX_INPUT_TOKENS: int = int(os.getenv('VLLM_MAX_INPUT_TOKENS', 3072))
+    VLLM_MAX_INPUT_TOKENS: int = int(os.getenv('VLLM_MAX_INPUT_TOKENS', 6144))
     @property
     def VLLM_MAX_OUTPUT_TOKENS(self) -> int:
         return self.VLLM_MAX_TOKENS - self.VLLM_MAX_INPUT_TOKENS

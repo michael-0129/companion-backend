@@ -18,7 +18,7 @@ class VllmProvider:
             "max_tokens": max_tokens or self.max_tokens,
             "temperature": temperature if temperature is not None else self.temperature,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(f"{self.endpoint}/v1/chat/completions", json=payload)
             response.raise_for_status()
             data = response.json()

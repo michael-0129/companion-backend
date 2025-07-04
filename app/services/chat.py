@@ -2,14 +2,57 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_
 
 from app import models, schemas
 from app.core.logging_config import get_logger
 from app.prompts.system_prompts import SYSTEM_PROMPT_SUMMARIZE_TURN, SYSTEM_PROMPT_SUMMARIZE_CONTEXT
 from app.utils.llm_provider import get_llm_provider
+import uuid
+from zoneinfo import ZoneInfo
+from sqlalchemy import exc as sa_exc
+from app.core.config import TIMEZONE
+from app.core.exceptions import DatabaseOperationError
+cet_tz = ZoneInfo(TIMEZONE)
 
 logger = get_logger(__name__)
+
+def create_chat_history(db: Session, entry: schemas.ChatHistoryCreate) -> models.ChatHistory:
+    """Creates a new ChatHistory entry in the database.
+
+    Args:
+        db: The SQLAlchemy database session.
+        entry: Pydantic schema containing data for the new chat history entry.
+
+    Returns:
+        The created ChatHistory model instance.
+
+    Raises:
+        DatabaseOperationError: If any database error occurs during creation or commit.
+    """
+    try:
+        db_entry_data = entry.model_dump()
+        # Ensure ID and timestamp are set if not provided by the schema (Pydantic defaults should handle this).
+        if 'id' not in db_entry_data or not db_entry_data['id']:
+            db_entry_data['id'] = uuid.uuid4()
+        if 'timestamp' not in db_entry_data or not db_entry_data['timestamp']:
+            db_entry_data['timestamp'] = datetime.now(cet_tz)
+        
+        db_chat_item = models.ChatHistory(**db_entry_data)
+        db.add(db_chat_item)
+        db.commit()
+        db.refresh(db_chat_item)
+        logger.info(f"Created ChatHistory entry {db_chat_item.id}.")
+        return db_chat_item
+    except sa_exc.IntegrityError as e:
+        db.rollback()
+        logger.error(f"Database IntegrityError creating chat history: {e}", exc_info=True)
+        raise DatabaseOperationError(message="Chat history creation failed due to a data conflict.", details={"original_error": str(e)}) from e
+    except sa_exc.SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database SQLAlchemyError creating chat history: {e}", exc_info=True)
+        raise DatabaseOperationError(message="A database error occurred while creating chat history.", details={"original_error": str(e)}) from e
+
 
 async def get_chat_history(
     db: Session,
@@ -39,8 +82,8 @@ async def get_chat_history(
         query = query.filter(search_filter)
     
     # Apply pagination and return results
-    return query.order_by(models.ChatHistory.timestamp.desc()).offset(skip).limit(limit).all()
-
+    results = query.order_by(models.ChatHistory.timestamp.desc()).offset(skip).limit(limit).all()
+    return list(reversed(results))
 async def get_chat_entry(db: Session, chat_id: UUID) -> Optional[models.ChatHistory]:
     """
     Retrieve a specific chat history entry by ID.

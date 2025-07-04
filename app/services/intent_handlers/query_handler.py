@@ -6,10 +6,9 @@ It fetches relevant information from memory (Codex entries) and recent chat hist
 constructs a comprehensive prompt, and then calls an LLM to generate a response to the user's query.
 """
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple
 from uuid import UUID
-from fastapi import HTTPException # For re-raising specific HTTP errors from get_openai_completion
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # schemas might be used if we were creating/returning structured data, not typical for query response.
@@ -18,21 +17,19 @@ from app.core.config import settings, TIMEZONE
 from app.core.logging_config import get_logger
 from app.services.memory import (
     semantic_search_codex,
-    list_chat_history as list_chat_history_service,
     DatabaseOperationError,
     DocumentProcessingError        
 )
-from app.services.intent_handlers.intent_registry import IntentHandler, intent_handler_registry
-from app.utils.llm_context_v2 import LlmContextManager
+from app.services.chat import get_chat_history as get_chat_history_service
+from app.services.intent_handlers.intent_registry import intent_handler_registry
 from app.prompts.system_prompts import SYSTEM_PROMPT_ANSWER
-# to prevent circular dependencies.
-from app.services.memory import generate_embedding
 from app.utils.security import decrypt_content
 from app.services import relational_state  # Import relational state for closure event lookup
 from app.utils.llm_provider import get_llm_provider
 from app.services.chat import generate_context_block_summary
 from app.utils.token_counter import TokenCounter
 from app.core.exceptions import InputTooLongError
+from app.services.protocol import list_protocol_events
 
 logger = get_logger(__name__)
 
@@ -79,11 +76,11 @@ async def handle_query_intent(
         - llm_call_error_updated (Optional[str]): Updated string of accumulated error messages.
 
     Raises:
-        This function catches specific custom exceptions from called services (`semantic_search_codex`, `list_chat_history_service`)
+        This function catches specific custom exceptions from called services (`semantic_search_codex`, `get_chat_history_service`)
         and `HTTPException` from `get_openai_completion`. It aims to handle them by logging and returning an error message to the user.
         Expected exceptions from services include:
         - `OpenAIClientNotInitializedError`, `OpenAIAPICallError`, `DocumentProcessingError` (from `semantic_search_codex` if embedding fails).
-        - `DatabaseOperationError` (from `semantic_search_codex` or `list_chat_history_service`).
+        - `DatabaseOperationError` (from `semantic_search_codex` or `get_chat_history_service`).
     """
     # Accept parameters dict if present (from orchestrator multi-task), else fallback to classification_data
     parameters = classification_data.get("parameters") if "parameters" in classification_data else classification_data
@@ -130,6 +127,24 @@ async def handle_query_intent(
     start_date_param = parameters.get("start_date") or parameters.get("event_date") or start_date_param
     end_date_param = parameters.get("end_date") or end_date_param
 
+    # --- Directive Enforcement ---
+    # Fetch the latest active directive (if any)
+    latest_directive = None
+    directives = list_protocol_events(db, event_type="directive", active=True)
+    if directives:
+        # Assume the most recent is first (ordered by timestamp desc)
+        latest_directive = directives[0].details.get("directive_content")
+
+    # Prepare SYSTEM_PROMPT_ANSWER with directive injected at the top
+    base_system_prompt = SYSTEM_PROMPT_ANSWER
+    if latest_directive:
+        # Truncate directive if too long (e.g., >512 chars)
+        max_directive_chars = 512
+        directive_for_prompt = latest_directive[:max_directive_chars]
+        system_prompt_for_answer = f"{directive_for_prompt}\n\n{base_system_prompt}"
+    else:
+        system_prompt_for_answer = base_system_prompt
+
     try:
         # Step 1: Semantic Search for relevant memories (Codex Entries)
         logger.debug(f"Performing semantic search for RAG query: '{query_summary_for_search[:100]}...', start_date: {start_date_param}, end_date: {end_date_param}")
@@ -161,7 +176,13 @@ async def handle_query_intent(
         logger.info(f"Retrieved {len(retrieved_memories)} memories from semantic search for RAG pipeline.")
 
         # Step 2: Retrieve recent chat history
-        recent_chat_history = list_chat_history_service(db, limit=settings.MAX_RECENT_CHAT_HISTORY)
+        recent_chat_history = await get_chat_history_service(db, limit=settings.MAX_RECENT_CHAT_HISTORY)
+        print("*"*20)
+        print(f"[Recent Chat HISTORY]: {[
+            f"User: {c.user_query}\nAI: {c.companion_response}"
+            for c in recent_chat_history
+        ]}")
+        print("*"*20)
         context_snapshot["recent_chat_history_turns_retrieved"] = len(recent_chat_history)
         logger.info(f"Retrieved {len(recent_chat_history)} recent chat turns for RAG context.")
 
@@ -179,40 +200,32 @@ async def handle_query_intent(
         ]
         chat_history_text_for_prompt = '\n'.join(chat_summaries)
 
-        # Calculate max tokens for context block summary: max_input_tokens - system prompt tokens - buffer
-        system_prompt_for_answer = SYSTEM_PROMPT_ANSWER.format(
-            user_query=user_query, 
-            retrieved_memories_text=retrieved_memories_text_for_prompt if retrieved_memories_text_for_prompt.strip() else "No relevant memories found.",
-            chat_history_text="PLACEHOLDER"  # Will be replaced by summary
-        )
+        # Dynamically build the context block for the prompt
+        context_blocks = []
+        if retrieved_memories:
+            context_blocks.append(f"[Relevant Memories]:\n{retrieved_memories_text_for_prompt}")
+        if recent_chat_history:
+            context_blocks.append(f"[Recent Chat History]:\n{chat_history_text_for_prompt}")
+        context_block_summary = '\n\n'.join(context_blocks)
+
+        # If no context blocks, just send system prompt + user query
+        if not context_blocks:
+            messages = [
+                {"role": "system", "content": system_prompt_for_answer},
+                {"role": "user", "content": user_query}
+            ]
+        else:
+            # Otherwise, include the context block summary
+            messages = [
+                {"role": "system", "content": system_prompt_for_answer},
+                {"role": "user", "content": f"{context_block_summary}\n\n{user_query}"}
+            ]
         token_counter = TokenCounter(settings.VLLM_MODEL)
-        system_prompt_tokens = token_counter.count(system_prompt_for_answer.replace("PLACEHOLDER", ""))
-        buffer_tokens = 32  # Small buffer for safety
-        max_context_summary_tokens = settings.VLLM_MAX_INPUT_TOKENS - system_prompt_tokens - buffer_tokens
-        if max_context_summary_tokens < 32:
-            logger.warning(f"System prompt nearly fills input token limit; cannot generate context summary.")
-            raise InputTooLongError("System prompt too large for context.")
-
-        # Generate context block summary (not persisted, just for context condensation)
-        context_block_summary = await generate_context_block_summary(
-            user_query=user_query,
-            chat_summaries=chat_summaries,
-            memories=memory_summaries,
-            max_tokens=max_context_summary_tokens
-        )
-        context_snapshot["context_block_summary"] = context_block_summary
-
-        # Assemble LLM messages: system prompt + user: context_block_summary
-        messages = [
-            {"role": "system", "content": system_prompt_for_answer.replace("PLACEHOLDER", context_block_summary)},
-            # Optionally, you could use a separate user message, but for most LLMs, this is sufficient
-        ]
         total_tokens = token_counter.count_messages(messages)
         if total_tokens > settings.VLLM_MAX_INPUT_TOKENS:
             logger.warning(f"Final assembled prompt exceeds input token limit ({total_tokens} > {settings.VLLM_MAX_INPUT_TOKENS}) even after summarization.")
             raise InputTooLongError(f"Context cannot be reduced below input token limit ({settings.VLLM_MAX_INPUT_TOKENS})!")
-
-        logger.debug(f"Assembled prompt for {settings.VLLM_MODEL}. Messages: {messages}")
+        logger.debug(f"Assembled prompt for {settings.VLLM_MODEL} (dynamic context). Messages: {messages}")
         llm = get_llm_provider()
         answer_response = await llm.generate(
             messages=messages,
@@ -224,7 +237,13 @@ async def handle_query_intent(
             answer_response = "I am unable to provide an answer at this time."
             llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + "LLM returned empty answer."
         companion_response_content = answer_response.strip() if isinstance(answer_response, str) else answer_response
-        logger.info(f"Generated RAG response using {settings.VLLM_MODEL} for intent '{intent}'.")
+        logger.info(f"Generated RAG response using {settings.VLLM_MODEL} for intent '{intent}' (dynamic context).")
+        context_snapshot["query_handler_outcome"] = {
+            "response_generated": bool(companion_response_content.strip()), 
+            "final_error_state": llm_call_error_updated,
+            "intent_processed": intent
+        }
+        return companion_response_content, None, llm_call_error_updated
     except DocumentProcessingError as service_exc:
         error_detail = f"Service error during RAG/QUERY handling ({intent}): {service_exc.message}"
         logger.error(error_detail, exc_info=True)

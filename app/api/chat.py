@@ -4,28 +4,28 @@ It orchestrates the process of receiving a user query, classifying its intent,
 dispatching it to the appropriate services via the TaskOrchestrator,
 and then persisting the interaction to the chat history.
 """
-from fastapi import APIRouter, Depends, HTTPException, Body, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import json
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 import re
 from fastapi.responses import JSONResponse
 
-from app import schemas, models
+from app import schemas
 from app.db.session import get_db
 from app.core.config import settings, TIMEZONE
 from app.core.logging_config import get_logger
-from app.core.exceptions import CoreApplicationException, LLMProviderError, InputTooLongError
+from app.core.exceptions import CoreApplicationException, InputTooLongError
 from typing import Dict, Any
 from app.services import chat
-from app.services.memory import (
-    create_chat_history,
+from app.services.protocol import (
     get_active_protocol_event,
     deactivate_protocol_event
 )
+from app.services.chat import create_chat_history
 from app.services.chat import get_chat_history as get_chat_history_service, generate_and_save_chat_summary
 from app.services.task_orchestrator import TaskOrchestrator
 from app.utils.llm_context_v2 import LlmContextManager

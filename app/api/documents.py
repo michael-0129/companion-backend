@@ -1,13 +1,11 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 from uuid import UUID
 
-from app import schemas, models
+from app import schemas
 from app.db.session import get_db
-from app.core.config import settings
-from app.services import memory, documents
+from app.services import documents
 from app.core.logging_config import get_logger
 
 router = APIRouter()

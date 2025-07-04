@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from app.models import CodexEntry, ChatHistory
 from app.core.config import settings
 from app.utils.security import decrypt_content

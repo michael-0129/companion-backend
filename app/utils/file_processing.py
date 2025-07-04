@@ -5,7 +5,6 @@ Utilities for file processing, including:
 3. File validation
 """
 import os
-from typing import Optional
 import magic
 import PyPDF2
 import docx

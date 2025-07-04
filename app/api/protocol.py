@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import schemas
 from app.db.session import SessionLocal
-from app.services import memory
+from app.services import protocol
 from uuid import UUID
 from typing import List
 
@@ -17,7 +17,7 @@ def get_db():
 
 @router.post("/", response_model=schemas.ProtocolEventOut)
 def create_protocol_event(event: schemas.ProtocolEventCreate, db: Session = Depends(get_db)):
-    db_event = memory.create_protocol_event(db, event)
+    db_event = protocol.create_protocol_event(db, event)
     return schemas.ProtocolEventOut(
         id=db_event.id,
         event_type=db_event.event_type,
@@ -28,7 +28,7 @@ def create_protocol_event(event: schemas.ProtocolEventCreate, db: Session = Depe
 
 @router.get("/", response_model=List[schemas.ProtocolEventOut])
 def list_protocol_events(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    db_events = memory.list_protocol_events(db, skip, limit)
+    db_events = protocol.list_protocol_events(db, skip, limit)
     return [
         schemas.ProtocolEventOut(
             id=e.id,
@@ -41,7 +41,7 @@ def list_protocol_events(skip: int = 0, limit: int = 100, db: Session = Depends(
 
 @router.post("/deactivate/{event_id}")
 def deactivate_protocol_event(event_id: UUID, db: Session = Depends(get_db)):
-    success = memory.deactivate_protocol_event(db, event_id)
+    success = protocol.deactivate_protocol_event(db, event_id)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
     return {"ok": True} 

@@ -13,11 +13,10 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app import models, schemas
-from app.services.memory import (
+from app.services.protocol import (
     create_protocol_event, deactivate_protocol_event, get_active_protocol_event
 )
 from app.core.logging_config import get_logger
-from datetime import datetime, timezone
 
 logger = get_logger(__name__)
 

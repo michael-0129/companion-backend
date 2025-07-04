@@ -8,7 +8,7 @@ It handles both regular memory creation from user queries and forced archival of
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, Tuple, List
 from uuid import UUID
-from datetime import datetime, timezone # timezone not explicitly used but good for awareness
+from datetime import datetime # timezone not explicitly used but good for awareness
 from fastapi import HTTPException # Current error handling catches this, though services aim to raise custom exceptions.
 import re
 import dateparser
@@ -18,13 +18,12 @@ from app.core.config import TIMEZONE
 from app import schemas # models are used by services, schemas by handlers for data creation.
 from app.core.logging_config import get_logger
 from app.services.memory import (
-    create_codex_entry, 
     generate_embedding,
-    get_active_protocol_event,
     # Import custom exceptions that might be raised by the services
     DatabaseOperationError,
     DocumentProcessingError
 )
+from app.services.memory import create_codex_entry
 from app.services.archive_service import ArchiveService
 from .intent_registry import intent_handler_registry
 from app.services import relational_state  # Import the new relational state module
@@ -226,7 +225,7 @@ async def handle_memory_intent(
                 response_type_display = mem_type 
                 companion_response_content = f"Received, Michael. By decree, this memory is consigned to the vault: archived as '{response_type_display}' (ID: {db_codex_entry.id})."
             else:
-                companion_response_content = f"Received, Michael. The memory has been integrated and its essence is preserved. (Type: '{mem_type}')"
+                companion_response_content = "Received, Michael. Memory stored."
         logger.info(f"[MEMORY CREATED] CodexEntry {db_codex_entry.id} of type '{mem_type}' via '{intent}' intent. User query: '{user_query}'. Parameters: {parameters}. Meta: {codex_meta}")
         context_snapshot["memory_creation_details"] = {
             "codex_id": str(db_codex_entry.id), 

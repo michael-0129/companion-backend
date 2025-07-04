@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 import requests
 import re
 
@@ -26,12 +25,12 @@ def sanitize_for_json(text):
 MODEL_REGISTRY = {
     "llama": {
         "tokenizer": "vllm_api",
-        "vllm_tokenizer_url": "http://localhost:8080/tokenize",
+        "vllm_tokenizer_url": "https://d86a-216-81-245-127.ngrok-free.app/tokenize",
         "max_tokens": 8192,
     },
     "mixtral": {
         "tokenizer": "vllm_api",
-        "vllm_tokenizer_url": "http://localhost:8080/tokenize",
+        "vllm_tokenizer_url": "https://d86a-216-81-245-127.ngrok-free.app/tokenize",
         "max_tokens": 32768,
     },
     "gpt": {

@@ -4,11 +4,7 @@ from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import Request
-from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
-# Initialize logging as early as possible
-from app.core import logging_config # This will run basicConfig
 
 # Corrected imports for database objects
 from app.db.session import Base, engine # Import Base and engine from the new session.py
