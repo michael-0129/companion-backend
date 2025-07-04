@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # LLM Provider Configuration (vLLM/OpenAI-compatible only)
     LLM_PROVIDER: str = os.getenv('LLM_PROVIDER', 'vllm')  # e.g., 'vllm', 'openai'
-    VLLM_API_URL: str = os.getenv('VLLM_API_URL', 'https://d86a-216-81-245-127.ngrok-free.app')
+    VLLM_API_URL: str = os.getenv('VLLM_API_URL', 'http://localhost:8080')
     VLLM_MODEL: str = os.getenv('VLLM_MODEL', 'llama-3.3-70b-instruct-awq')
     VLLM_MAX_TOKENS: int = int(os.getenv('VLLM_MAX_TOKENS', 8192))
     VLLM_TEMPERATURE: float = float(os.getenv('VLLM_TEMPERATURE', 0.7))
