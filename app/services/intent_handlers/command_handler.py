@@ -224,11 +224,12 @@ async def handle_command_intent(
 async def _store_directive_protocol_event(db, user_query, command_name, command_params, context_snapshot):
     from app import schemas
     from app.services.protocol import create_protocol_event, list_protocol_events
-    MAX_DIRECTIVE_TOKENS = 70
+    MAX_DIRECTIVE_TOKENS = 100
     previous_directives = list_protocol_events(db, event_type="directive", active=True)
     current_directive = previous_directives[0].details.get("directive_content") if previous_directives else ""
     new_directive = user_query.strip()
     # LLM-based synthesis prompt with keyword preservation
+
     synthesis_prompt = f"""
 You are the protocol directive synthesizer for the Master Companion AI.
 Here is the current active directive:
@@ -250,9 +251,12 @@ Your task:
     ]
     synthesized_directive = await llm.generate(messages, max_tokens=MAX_DIRECTIVE_TOKENS, temperature=0.0)
     # Update the existing protocol event if present, else create new
+    
     if previous_directives:
         directive_event = previous_directives[0]
         directive_event.details["directive_content"] = synthesized_directive.strip()
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(directive_event, "details")
         directive_event.active = True
         db.commit()
         db.refresh(directive_event)

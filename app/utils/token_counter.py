@@ -25,12 +25,12 @@ def sanitize_for_json(text):
 MODEL_REGISTRY = {
     "llama": {
         "tokenizer": "vllm_api",
-        "vllm_tokenizer_url": "http://localhost:8080",
+        "vllm_tokenizer_url": "http://localhost:8080/tokenize",
         "max_tokens": 8192,
     },
     "mixtral": {
         "tokenizer": "vllm_api",
-        "vllm_tokenizer_url": "http://localhost:8080",
+        "vllm_tokenizer_url": "http://localhost:8080/tokenize",
         "max_tokens": 32768,
     },
     "gpt": {

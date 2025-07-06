@@ -143,6 +143,11 @@ async def generate_context_block_summary(user_query, chat_summaries, memories, m
         The LLM-generated context block summary (str)
     """
     logger.info(f"Generating context block summary with max_tokens={max_tokens}.")
+    # Defensive: ensure non-empty lists for prompt
+    if not chat_summaries:
+        chat_summaries = ["(none)"]
+    if not memories:
+        memories = ["(none)"]
     prompt = SYSTEM_PROMPT_SUMMARIZE_CONTEXT.format(
         user_query=user_query,
         chat_history_text='\n'.join(chat_summaries),

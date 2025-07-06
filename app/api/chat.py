@@ -88,10 +88,20 @@ async def agent_interaction(
     5. Persists the full interaction (query, response, context) to the database.
     """
     user_query = request.user_query
-    # Early tokenization check: include system prompt + user query
+    # Fetch the current active directive (if any)
+    active_directive_event = get_active_protocol_event(db, event_type="directive")
+    directive = None
+    if active_directive_event and active_directive_event.details:
+        directive = active_directive_event.details.get("directive_content")
+    # Build protocol block if directive exists
+    protocol_block = ""
+    if directive:
+        protocol_block = directive
+    # Early tokenization check: include system prompt + protocol block + user query
     system_prompt = SYSTEM_PROMPT_CLASSIFY.format(
         user_query=user_query,
-        current_date=datetime.now(cet_tz).strftime("%Y-%m-%d")
+        current_date=datetime.now(cet_tz).strftime("%Y-%m-%d"),
+        protocol_block=protocol_block
     )
     token_counter = TokenCounter(settings.VLLM_MODEL)
     total_tokens = token_counter.count(system_prompt) + token_counter.count(user_query)

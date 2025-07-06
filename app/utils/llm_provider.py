@@ -12,6 +12,9 @@ class VllmProvider:
         self.temperature = settings.VLLM_TEMPERATURE
 
     async def generate(self, messages, max_tokens=None, temperature=None):
+        assert isinstance(messages, list), f"LLM messages must be a list, got {type(messages)}"
+        for m in messages:
+            assert isinstance(m, dict) and "role" in m and "content" in m, f"Each message must be a dict with 'role' and 'content', got {m}"
         payload = {
             "model": self.model,
             "messages": messages,

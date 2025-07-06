@@ -107,7 +107,6 @@ class TaskOrchestrator:
                 ):
                     logger.info("Protocol block detected in handler result. Returning protocol message to user and aborting further task execution.")
                     return response_content, None, handler_errors
-                # Only add non-empty, non-duplicate 'Received, Michael.' responses
                 if response_content:
                     user_responses.append(response_content)
                 if linked_codex_id:
@@ -115,27 +114,9 @@ class TaskOrchestrator:
                 if handler_errors:
                     self.llm_call_errors.append(str(handler_errors))
             final_errors = "; ".join(self.llm_call_errors) if self.llm_call_errors else None
-            # --- Minimal confirmation logic ---
-            # If any response is a protocol block or error, return as is
-            protocol_block = any(
-                "protocol_blocked_memory" in self.context_snapshot or
-                (resp and ("sealed" in resp or "No new memory may be recorded" in resp))
-                for resp in user_responses
-            )
-            if protocol_block:
-                return user_responses[0], (linked_codex_ids[0] if linked_codex_ids else None), final_errors
-            # If there are any user_responses, deduplicate and only return a single minimal confirmation
-            if user_responses:
-                # If any response is not exactly 'Received, Michael.' or is a protocol block, return it
-                for resp in user_responses:
-                    if resp.strip() != "Received, Michael.":
-                        return resp, (linked_codex_ids[0] if linked_codex_ids else None), final_errors
-                # Otherwise, return a single minimal confirmation
-                return "Received, Michael.", (linked_codex_ids[0] if linked_codex_ids else None), final_errors
-            # If there are no QUERY/COMMAND responses, but a handler created an object (e.g., memory), return a protocol-aligned confirmation
-            if not user_responses and linked_codex_ids:
-                return "Received, Michael.", linked_codex_ids[0], final_errors
-            return "", (linked_codex_ids[0] if linked_codex_ids else None), final_errors
+            # Concatenate all user_responses with separator, or return empty string if none
+            aggregated_response = "\n\n".join(user_responses) if user_responses else ""
+            return aggregated_response, (linked_codex_ids[0] if linked_codex_ids else None), final_errors
         except TaskOrchestrationError as e:
             logger.error(f"A recoverable error occurred during task orchestration: {e.message}", exc_info=True)
             self.llm_call_errors.append(e.message)

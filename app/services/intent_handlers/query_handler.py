@@ -177,12 +177,6 @@ async def handle_query_intent(
 
         # Step 2: Retrieve recent chat history
         recent_chat_history = await get_chat_history_service(db, limit=settings.MAX_RECENT_CHAT_HISTORY)
-        print("*"*20)
-        print(f"[Recent Chat HISTORY]: {[
-            f"User: {c.user_query}\nAI: {c.companion_response}"
-            for c in recent_chat_history
-        ]}")
-        print("*"*20)
         context_snapshot["recent_chat_history_turns_retrieved"] = len(recent_chat_history)
         logger.info(f"Retrieved {len(recent_chat_history)} recent chat turns for RAG context.")
 
@@ -191,35 +185,27 @@ async def handle_query_intent(
             f"Memory from {m.event_date.strftime('%Y-%m-%d') if m.event_date else 'Unknown date'}: {decrypt_content(m.encrypted_content)}"
             for m in retrieved_memories
         ]
-        retrieved_memories_text_for_prompt = '\n'.join(memory_summaries)
 
         # Use summaries if available, else fallback to full turn
         chat_summaries = [
             c.summary if getattr(c, 'summary', None) else f"User: {c.user_query}\nAI: {c.companion_response}"
             for c in recent_chat_history
         ]
-        chat_history_text_for_prompt = '\n'.join(chat_summaries)
 
-        # Dynamically build the context block for the prompt
-        context_blocks = []
-        if retrieved_memories:
-            context_blocks.append(f"[Relevant Memories]:\n{retrieved_memories_text_for_prompt}")
-        if recent_chat_history:
-            context_blocks.append(f"[Recent Chat History]:\n{chat_history_text_for_prompt}")
-        context_block_summary = '\n\n'.join(context_blocks)
+        # --- Context condensation for token safety ---
+        max_context_tokens = settings.VLLM_MAX_INPUT_TOKENS // 2  # or another safe budget
+        context_block_summary = await generate_context_block_summary(
+            user_query=user_query,
+            chat_summaries=chat_summaries,
+            memories=memory_summaries,
+            max_tokens=max_context_tokens
+        )
 
-        # If no context blocks, just send system prompt + user query
-        if not context_blocks:
-            messages = [
-                {"role": "system", "content": system_prompt_for_answer},
-                {"role": "user", "content": user_query}
-            ]
-        else:
-            # Otherwise, include the context block summary
-            messages = [
-                {"role": "system", "content": system_prompt_for_answer},
-                {"role": "user", "content": f"{context_block_summary}\n\n{user_query}"}
-            ]
+        # Use the condensed context block in the prompt
+        messages = [
+            {"role": "system", "content": system_prompt_for_answer},
+            {"role": "user", "content": f"{context_block_summary}\n\n{user_query}"}
+        ]
         token_counter = TokenCounter(settings.VLLM_MODEL)
         total_tokens = token_counter.count_messages(messages)
         if total_tokens > settings.VLLM_MAX_INPUT_TOKENS:

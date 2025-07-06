@@ -191,12 +191,6 @@ async def semantic_search_codex(
 
         # Execute the query
         results = stmt.all()
-        print("*"*20)
-        print(f"[Relevant memories]: {[
-            f"Memory from {m.event_date.strftime('%Y-%m-%d') if m.event_date else 'Unknown date'}: {decrypt_content(m.encrypted_content)}"
-            for m in results
-        ]}")
-        print("*"*20)
         logger.info(f"Semantic search found {len(results)} results for query: '{query_text[:50]}...'")
         return results
 
