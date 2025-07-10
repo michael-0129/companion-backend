@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import exc as sa_exc
 from app.core.config import TIMEZONE
 from app.core.exceptions import DatabaseOperationError
+from app.db.session import SessionLocal
 cet_tz = ZoneInfo(TIMEZONE)
 
 logger = get_logger(__name__)
@@ -103,16 +104,16 @@ async def delete_chat_entry(db: Session, chat_id: UUID) -> bool:
     db.commit()
     return True
 
-async def generate_and_save_chat_summary(db, chat_history_instance):
+async def generate_and_save_chat_summary(chat_history_instance):
     """
     Generates a concise summary for a chat turn using the LLM and saves it to the summary field.
     Args:
-        db: SQLAlchemy session
         chat_history_instance: models.ChatHistory instance (must be committed)
     """
     if not chat_history_instance or not chat_history_instance.id:
         logger.error("No valid chat history instance provided for summary generation.")
         return
+    db = SessionLocal()
     try:
         prompt = SYSTEM_PROMPT_SUMMARIZE_TURN.format(
             user_query=chat_history_instance.user_query,
@@ -130,6 +131,8 @@ async def generate_and_save_chat_summary(db, chat_history_instance):
         logger.info(f"Saved summary for ChatHistory {chat_history_instance.id}.")
     except Exception as e:
         logger.error(f"Failed to generate/save summary for ChatHistory {chat_history_instance.id}: {e}", exc_info=True)
+    finally:
+        db.close()
 
 async def generate_context_block_summary(user_query, chat_summaries, memories, max_tokens):
     """

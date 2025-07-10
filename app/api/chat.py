@@ -242,7 +242,7 @@ async def agent_interaction(
     )
     chat_history_entry = create_chat_history(db=db, entry=chat_history_data)
     # Trigger summary generation in the background
-    background_tasks.add_task(generate_and_save_chat_summary, db, chat_history_entry)
+    background_tasks.add_task(generate_and_save_chat_summary, chat_history_entry)
     logger.info(f"Background summary generation task added for ChatHistory {chat_history_entry.id}.")
     # Return the persisted chat history entry, confirming the interaction is complete.
     return chat_history_entry

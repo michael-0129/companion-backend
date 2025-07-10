@@ -137,7 +137,7 @@ async def process_document_upload(
         return schemas.DocumentUploadResponse(
             document_id=document.id,
             status="completed",
-            message=f"Received, Michael. The document '{filename}' has been integrated and {len(codex_entries)} memories were created.",
+            message=f"The document is woven into memory. '{filename}' has been integrated and {len(codex_entries)} memories were created.",
             codex_entry_id=document.codex_entry_id
         )
 

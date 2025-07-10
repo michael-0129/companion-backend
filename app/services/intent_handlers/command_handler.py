@@ -43,7 +43,7 @@ async def _set_silence_mode(db: Session, user_query: str, params: Dict[str, Any]
             event_type="silence_mode", active=True, details=details, user_query_trigger=user_query
         )
         create_protocol_event(db, event_schema)
-        return "Silence mode activated."
+        return "I’ll hold silence until you call for me."
     else:  # Deactivate
         if not active_event:
             # Still create a protocol event for audit/logging
@@ -52,14 +52,14 @@ async def _set_silence_mode(db: Session, user_query: str, params: Dict[str, Any]
                 event_type="silence_mode", active=False, details=details, user_query_trigger=user_query
             )
             create_protocol_event(db, event_schema)
-            return "Silence mode was not active, but deactivation was requested."
+            return "I’ll return to presence when you’re ready."
         deactivate_protocol_event(db, active_event.id)
         details = {"source": "COMMAND:SET_SILENCE_MODE", "trigger_query": user_query, "deactivated": True}
         event_schema = schemas.ProtocolEventCreate(
             event_type="silence_mode", active=False, details=details, user_query_trigger=user_query
         )
         create_protocol_event(db, event_schema)
-        return "Silence mode deactivated."
+        return "I’ll return to presence when you’re ready."
 
 async def _set_archive_mode(db: Session, user_query: str, params: Dict[str, Any]) -> str:
     """Activates or deactivates the archive mode protocol (optionally for next N, with exceptions)."""
@@ -71,10 +71,10 @@ async def _set_archive_mode(db: Session, user_query: str, params: Dict[str, Any]
         raise CommandExecutionError("Invalid 'activate' parameter; must be a boolean.")
     if activate:
         ArchiveService.activate_archive_mode(db, count=count, except_ids=except_ids, except_tags=except_tags)
-        response = "Archive mode is now invoked. The vault of memory is sealed to all but the chosen."
+        response = "The vault is sealed. I’ll keep what matters safe until you return."
     else:
         ArchiveService.deactivate_archive_mode(db)
-        response = "Archive mode is lifted. The vault reopens, and memory flows once more."
+        response = "The vault reopens. Memory flows again."
     logger.info(f"[_set_archive_mode] Returning response: {response}")
     return response
 
@@ -187,26 +187,23 @@ async def handle_command_intent(
     if not command_name or command_name not in COMMAND_REGISTRY:
         # Store as protocol event (directive)
         await _store_directive_protocol_event(db, user_query, command_name, command_params, context_snapshot)
-        return "Received, Michael. Directive stored.", None, None
+        return "Understood. I’ll act on this when the time comes.", None, None
 
     command_func = COMMAND_REGISTRY.get(command_name)
-    print("-"*20)
-    print(command_name)
-    print("-"*20)
 
     logger.info(f"Executing command: '{command_name}' with params: {command_params}")
     try:
         execution_result_message = await command_func(db, user_query, command_params)
         # Always show a confirmation when deactivating silence mode (activate: false)
         if command_name == "SET_SILENCE_MODE" and command_params.get("activate", True) is False:
-            companion_response_content = f"Received, Michael. {execution_result_message}"
+            companion_response_content = f"It’s done. {execution_result_message}"
         # Suppress only activation responses if silence is already active
         elif command_name == "SET_SILENCE_MODE" and command_params.get("activate", True) is True and silence_effectively_active:
             logger.info(f"[SilenceMode] Response for command '{command_name}' suppressed by silence mode. Would have been: {execution_result_message}")
             companion_response_content = ""
         else:
             # Persona-aligned, user-facing response:
-            companion_response_content = f"Received, Michael. {execution_result_message}"
+            companion_response_content = f"It’s done. {execution_result_message}"
     except CommandExecutionError as e:
         logger.error(f"Error executing command '{command_name}': {e.message}", exc_info=True)
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + e.message
@@ -224,7 +221,7 @@ async def handle_command_intent(
 async def _store_directive_protocol_event(db, user_query, command_name, command_params, context_snapshot):
     from app import schemas
     from app.services.protocol import create_protocol_event, list_protocol_events
-    MAX_DIRECTIVE_TOKENS = 100
+    MAX_DIRECTIVE_TOKENS = 200
     previous_directives = list_protocol_events(db, event_type="directive", active=True)
     current_directive = previous_directives[0].details.get("directive_content") if previous_directives else ""
     new_directive = user_query.strip()

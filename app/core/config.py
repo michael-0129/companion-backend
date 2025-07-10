@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     VLLM_TEMPERATURE: float = float(os.getenv('VLLM_TEMPERATURE', 0.7))
 
     # New: Separate input/output token limits
-    VLLM_MAX_INPUT_TOKENS: int = int(os.getenv('VLLM_MAX_INPUT_TOKENS', 6144))
+    VLLM_MAX_INPUT_TOKENS: int = int(os.getenv('VLLM_MAX_INPUT_TOKENS', 9216))
     @property
     def VLLM_MAX_OUTPUT_TOKENS(self) -> int:
         return self.VLLM_MAX_TOKENS - self.VLLM_MAX_INPUT_TOKENS
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Context Management
     CONTEXT_CHAT_HISTORY_LIMIT: int = 10  # Max chat history turns for context
     MAX_RECENT_CHAT_HISTORY: int = 10     # Max recent chat turns for context
-    MAX_SEMANTIC_SEARCH_RESULTS: int = 5  # Max RAG search results
+    MAX_SEMANTIC_SEARCH_RESULTS: int = 6  # Max RAG search results
     MAX_DOC_TEXT_FOR_LLM_EXTRACTION_CHARS: int = 75000  # Max doc chars for LLM extraction
     DEFAULT_MAX_RESPONSE_TOKENS: int = 1500  # Max tokens for LLM response
     DEFAULT_SYSTEM_PROMPT_TOKEN_OVERHEAD: int = 100  # Overhead for system prompt

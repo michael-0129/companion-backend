@@ -1,19 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import schemas
-from app.db.session import SessionLocal
+from app.db.session import get_db
 from app.services import protocol
 from uuid import UUID
 from typing import List
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/", response_model=schemas.ProtocolEventOut)
 def create_protocol_event(event: schemas.ProtocolEventCreate, db: Session = Depends(get_db)):

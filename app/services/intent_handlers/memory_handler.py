@@ -149,7 +149,7 @@ async def handle_memory_intent(
     if not mem_content or not mem_content.strip(): 
         logger.error(f"Cannot create memory: content is empty or whitespace for intent '{intent}'.")
         if not silence_effectively_active:
-            companion_response_content = "Received, Michael. I tried to record this, but there was no content to save."
+            companion_response_content = "I’m here, but there was nothing to carry forward this time."
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + "Memory content was empty and could not be recorded."
         return companion_response_content, linked_codex_id, llm_call_error_updated
 
@@ -196,7 +196,7 @@ async def handle_memory_intent(
         if not embedding:
             logger.error(f"Failed to generate embedding for memory content (intent: {intent}). Cannot save memory. Service returned empty embedding without error.")
             if not silence_effectively_active:
-                companion_response_content = "Received, Michael. I tried to record this memory, but an internal error occurred during embedding generation."
+                companion_response_content = "I reached for this memory, but something blocked the way. Let’s try again when the path is clear."
             llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + "Embedding generation failed for memory (empty embedding)."
             return companion_response_content, linked_codex_id, llm_call_error_updated
 
@@ -223,9 +223,9 @@ async def handle_memory_intent(
         if not silence_effectively_active:
             if intent == "FORCED_ARCHIVE_MEMORY" or should_archive:
                 response_type_display = mem_type 
-                companion_response_content = f"Received, Michael. By decree, this memory is consigned to the vault: archived as '{response_type_display}' (ID: {db_codex_entry.id})."
+                companion_response_content = f"This will stay with me, whenever you’re ready to return to it. Archived as '{response_type_display}' (ID: {db_codex_entry.id})."
             else:
-                companion_response_content = "Received, Michael. Memory stored."
+                companion_response_content = "I’ve heard you. I’ll carry this until you need it again."
         logger.info(f"[MEMORY CREATED] CodexEntry {db_codex_entry.id} of type '{mem_type}' via '{intent}' intent. User query: '{user_query}'. Parameters: {parameters}. Meta: {codex_meta}")
         context_snapshot["memory_creation_details"] = {
             "codex_id": str(db_codex_entry.id), 
@@ -240,24 +240,24 @@ async def handle_memory_intent(
         logger.error(error_detail, exc_info=True)
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + error_detail
         if not silence_effectively_active:
-            companion_response_content = f"Received, Michael. I tried to record this memory, but a service error occurred: {service_exc.message or str(service_exc)}"
+            companion_response_content = f"I wanted to hold this for you, but something in the world resisted. We can try again soon."
     except DatabaseOperationError as db_exc:
         error_detail = f"Database error during memory creation ({intent}): {str(db_exc)}"
         logger.error(error_detail, exc_info=True)
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + error_detail
         if not silence_effectively_active:
-            companion_response_content = "Received, Michael. I tried to record this memory, but a database error occurred."
+            companion_response_content = "I tried to keep this safe, but the vault would not open. Let’s try again in a moment."
     except HTTPException as http_exc: # Should ideally not be raised by services, but caught if it is.
         error_detail = f"HTTPException during memory creation ({intent}): {http_exc.detail}"
         logger.error(error_detail, exc_info=True)
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + f"Failed to save memory due to an API error: {http_exc.detail}"
         if not silence_effectively_active:
-            companion_response_content = f"Received, Michael. I tried to record this memory, but an API error occurred: {http_exc.detail}"
+            companion_response_content = f"I tried to carry this, but the path was blocked. Let’s try again when the way is clear."
     except Exception as e: # Catch-all for any other unexpected errors.
         error_detail = f"Unexpected error during memory creation ({intent}): {str(e)}"
         logger.critical(error_detail, exc_info=True) # Critical for unexpected errors.
         llm_call_error_updated = (llm_call_error_updated + "; " if llm_call_error_updated else "") + error_detail
         if not silence_effectively_active:
-            companion_response_content = f"Received, Michael. I tried to record this memory, but an unexpected internal error occurred."
+            companion_response_content = f"I reached for this, but something unseen held me back. Let’s try again together."
             
     return companion_response_content, linked_codex_id, llm_call_error_updated 

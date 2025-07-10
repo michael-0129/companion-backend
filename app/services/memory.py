@@ -114,7 +114,7 @@ async def delete_codex_entry(
 async def semantic_search_codex(
     db: Session, 
     query_text: str, 
-    top_k: int = 5,
+    top_k: int = 6,
     start_date_str: Optional[str] = None, 
     end_date_str: Optional[str] = None,   
     entry_type_filter: Optional[List[str]] = None, 
@@ -187,7 +187,12 @@ async def semantic_search_codex(
             stmt = stmt.filter(models.CodexEntry.archived == False)
 
         # Order by vector similarity (L2 distance) and limit results
-        stmt = stmt.order_by(models.CodexEntry.vector.l2_distance(query_embedding)).limit(top_k)
+        stmt = (
+            stmt
+            .filter(models.CodexEntry.vector.l2_distance(query_embedding) < 0.6)
+            .order_by(models.CodexEntry.vector.l2_distance(query_embedding))
+            .limit(top_k)
+        )
 
         # Execute the query
         results = stmt.all()
