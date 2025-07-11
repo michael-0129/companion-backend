@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Import API routers - these paths will be updated later in the refactoring
 from app.api import codex, chat, protocol, documents
+from app.api import auth
 
 # Load environment variables - Pydantic settings now handles this, but load_dotenv() can remain if other non-Pydantic env vars are used elsewhere or for local dev convenience.
 load_dotenv() 
@@ -46,9 +47,9 @@ ASSETS_DIR = os.path.join(DIST_DIR, "assets")
 # Mount static frontend assets
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="static")
 
-@app.get("/", tags=["Root"])
-async def read_root():
-    return {"message": f"Welcome to {settings.PROJECT_NAME}. API docs at /docs or /redoc."}
+# @app.get("/", tags=["Root"])
+# async def read_root():
+#     return {"message": f"Welcome to {settings.PROJECT_NAME}. API docs at /docs or /redoc."}
 
 # Include API routers
 # The prefix for these routers will be updated when we move to api_v1 structure
@@ -56,6 +57,7 @@ app.include_router(codex.router, prefix=f"{settings.API_V1_STR}/codex", tags=["C
 app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat", tags=["Chat Endpoints"])
 app.include_router(protocol.router, prefix=f"{settings.API_V1_STR}/protocol", tags=["Protocol Event Endpoints"])
 app.include_router(documents.router, prefix=f"{settings.API_V1_STR}/documents", tags=["Documents"])
+app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Auth Endpoints"])
 
 # Serve index.html at root
 @app.get("/")
@@ -70,6 +72,10 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
     ):
         return FileResponse(os.path.join(DIST_DIR, "index.html"))
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+@app.get("/favicon.png")
+async def favicon():
+    return FileResponse(os.path.join(DIST_DIR, "favicon.png"))
 
 @app.get("/health", tags=["System"])
 async def health_check():

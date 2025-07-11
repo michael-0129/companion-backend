@@ -44,6 +44,22 @@ def extract_json_from_code_block(text: str) -> str:
         return match.group(1).strip()
     return text.strip()
 
+def extract_first_json(text):
+    # Try to find the first JSON array or object in the text
+    array_match = re.search(r'(\[\s*{.*?}\s*\])', text, re.DOTALL)
+    object_match = re.search(r'({.*})', text, re.DOTALL)
+    if array_match:
+        if array_match.end() < len(text):
+            logger.warning(f"Extra text detected after JSON array: {text[array_match.end():].strip()}")
+        return json.loads(array_match.group(1))
+    elif object_match:
+        if object_match.end() < len(text):
+            logger.warning(f"Extra text detected after JSON object: {text[object_match.end():].strip()}")
+        return json.loads(object_match.group(1))
+    else:
+        logger.error(f"No valid JSON found in LLM output: {text}")
+        raise ValueError("No valid JSON found in LLM output.")
+
 async def _handle_silence_protocol(db: Session) -> bool:
     """
     Checks if the silence protocol is currently active. If an expired protocol
@@ -146,7 +162,7 @@ async def agent_interaction(
                 protocol_blocked=True
             )
         cleaned_response = extract_json_from_code_block(classify_response)
-        classification_data = json.loads(cleaned_response)
+        classification_data = extract_first_json(cleaned_response)
         logger.info(f"LLM classification output: {classify_response}")
         # --- Robustly handle both dict and list outputs from LLM ---
         if isinstance(classification_data, list):

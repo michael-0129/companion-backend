@@ -135,3 +135,12 @@ class DocumentProcessResponse(BaseModel):
     success: bool
     message: str
     codex_entries: List[UUID] = Field(default_factory=list) 
+
+class AuthLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class AuthLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    message: Optional[str] = None 
