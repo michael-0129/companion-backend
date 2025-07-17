@@ -135,8 +135,22 @@ async def handle_query_intent(
         # Assume the most recent is first (ordered by timestamp desc)
         latest_directive = directives[0].details.get("directive_content")
 
+    # --- Tone/Mode Enforcement ---
+    # Fetch the latest active tone_mode (if any)
+    from app.prompts import system_prompts
+    latest_tone = None
+    tone_events = list_protocol_events(db, event_type="tone_mode", active=True)
+    if tone_events:
+        latest_tone = tone_events[0].details.get("tone")
+    if latest_tone == "Companion":
+        tone_properties = system_prompts.TONE_PROPERTIES_COMPANION
+    elif latest_tone == "Director":
+        tone_properties = system_prompts.TONE_PROPERTIES_DIRECTOR
+    else:
+        tone_properties = system_prompts.TONE_PROPERTIES_ARCHITECT
+    base_system_prompt = system_prompts.SYSTEM_PROMPT_ANSWER.format(tone_properties=tone_properties)
+
     # Prepare SYSTEM_PROMPT_ANSWER with directive injected at the top
-    base_system_prompt = SYSTEM_PROMPT_ANSWER
     if latest_directive:
         # Truncate directive if too long (e.g., >512 chars)
         max_directive_chars = 512
@@ -185,6 +199,10 @@ async def handle_query_intent(
             f"Memory from {m.event_date.strftime('%Y-%m-%d') if m.event_date else 'Unknown date'}: {decrypt_content(m.encrypted_content)}"
             for m in retrieved_memories
         ]
+
+        print("*"*30)
+        print([f"Memory from {m.event_date.strftime('%Y-%m-%d') if m.event_date else 'Unknown date'}: {decrypt_content(m.encrypted_content)}" for m in retrieved_memories])
+        print("*"*30)
 
         # Use summaries if available, else fallback to full turn
         chat_summaries = [

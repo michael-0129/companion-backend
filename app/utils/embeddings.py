@@ -91,9 +91,6 @@ def embed_passages(texts: List[str]) -> List[List[float]]:
     return model.encode(texts, normalize_embeddings=True).tolist()
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-    """
-    Calculate cosine similarity between two vectors.
-    """
     if len(vec1) != len(vec2):
         raise ValueError("Vectors must have the same length")
     
@@ -103,5 +100,7 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     
     if norm1 == 0 or norm2 == 0:
         return 0
+    
+    return dot_product / (norm1 * norm2)
     
  

@@ -45,20 +45,20 @@ def extract_json_from_code_block(text: str) -> str:
     return text.strip()
 
 def extract_first_json(text):
-    # Try to find the first JSON array or object in the text
-    array_match = re.search(r'(\[\s*{.*?}\s*\])', text, re.DOTALL)
-    object_match = re.search(r'({.*})', text, re.DOTALL)
-    if array_match:
-        if array_match.end() < len(text):
-            logger.warning(f"Extra text detected after JSON array: {text[array_match.end():].strip()}")
-        return json.loads(array_match.group(1))
-    elif object_match:
-        if object_match.end() < len(text):
-            logger.warning(f"Extra text detected after JSON object: {text[object_match.end():].strip()}")
-        return json.loads(object_match.group(1))
-    else:
-        logger.error(f"No valid JSON found in LLM output: {text}")
-        raise ValueError("No valid JSON found in LLM output.")
+    """
+    Extracts the first valid JSON array or object from a string, even if the string contains extra or malformed data.
+    Handles both single objects and arrays.
+    """
+    import json
+    for start in range(len(text)):
+        if text[start] in '[{':
+            try:
+                obj, end = json.JSONDecoder().raw_decode(text[start:])
+                return obj
+            except json.JSONDecodeError:
+                continue
+    logger.error(f"No valid JSON found in LLM output: {text}")
+    raise ValueError("No valid JSON found in LLM output.")
 
 async def _handle_silence_protocol(db: Session) -> bool:
     """
@@ -109,6 +109,13 @@ async def agent_interaction(
     directive = None
     if active_directive_event and active_directive_event.details:
         directive = active_directive_event.details.get("directive_content")
+    # Fetch the current active tone/mode (if any)
+    active_tone_event = get_active_protocol_event(db, event_type="tone_mode")
+    current_tone = "Architect"
+    if active_tone_event and active_tone_event.details:
+        tone_candidate = active_tone_event.details.get("tone")
+        if tone_candidate in ("Architect", "Companion", "Director"):
+            current_tone = tone_candidate
     # Build protocol block if directive exists
     protocol_block = ""
     if directive:
@@ -117,7 +124,8 @@ async def agent_interaction(
     system_prompt = SYSTEM_PROMPT_CLASSIFY.format(
         user_query=user_query,
         current_date=datetime.now(cet_tz).strftime("%Y-%m-%d"),
-        protocol_block=protocol_block
+        protocol_block=protocol_block,
+        current_tone=current_tone
     )
     token_counter = TokenCounter(settings.VLLM_MODEL)
     total_tokens = token_counter.count(system_prompt) + token_counter.count(user_query)

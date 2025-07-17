@@ -21,7 +21,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from app.utils.embeddings import embed_query, embed_passage
+from app.utils.embeddings import embed_query, embed_passage, cosine_similarity
 
 logger = get_logger(__name__)
 
@@ -114,7 +114,7 @@ async def delete_codex_entry(
 async def semantic_search_codex(
     db: Session, 
     query_text: str, 
-    top_k: int = 6,
+    top_k: int = 8,
     start_date_str: Optional[str] = None, 
     end_date_str: Optional[str] = None,   
     entry_type_filter: Optional[List[str]] = None, 
@@ -147,7 +147,7 @@ async def semantic_search_codex(
     query_embedding: List[float]
     try:
         # generate_embedding raises specific errors if it fails.
-        query_embedding = await generate_embedding(query_text)
+        query_embedding = await generate_embedding(query_text, True)
     except (DocumentProcessingError) as e:
         # Log and re-raise to be handled by the API layer.
         logger.error(f"Failed to generate embedding for semantic search query '{query_text[:50]}...': {e}", exc_info=True)
@@ -189,8 +189,7 @@ async def semantic_search_codex(
         # Order by vector similarity (L2 distance) and limit results
         stmt = (
             stmt
-            .filter(models.CodexEntry.vector.l2_distance(query_embedding) < 0.6)
-            .order_by(models.CodexEntry.vector.l2_distance(query_embedding))
+            .order_by(models.CodexEntry.vector.cosine_distance(query_embedding))
             .limit(top_k)
         )
 
@@ -203,7 +202,6 @@ async def semantic_search_codex(
         logger.error(f"Unexpected error during semantic search DB operations for '{query_text[:50]}...': {e}", exc_info=True)
         db.rollback()
         raise DatabaseOperationError(message=f"Unexpected error during semantic search DB operations: {str(e)}", original_exception=e)
-
 
 def list_codex_entries(
     db: Session,

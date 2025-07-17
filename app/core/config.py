@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Context Management
     CONTEXT_CHAT_HISTORY_LIMIT: int = 10  # Max chat history turns for context
     MAX_RECENT_CHAT_HISTORY: int = 10     # Max recent chat turns for context
-    MAX_SEMANTIC_SEARCH_RESULTS: int = 6  # Max RAG search results
+    MAX_SEMANTIC_SEARCH_RESULTS: int = 8  # Max RAG search results
     MAX_DOC_TEXT_FOR_LLM_EXTRACTION_CHARS: int = 75000  # Max doc chars for LLM extraction
     DEFAULT_MAX_RESPONSE_TOKENS: int = 1500  # Max tokens for LLM response
     DEFAULT_SYSTEM_PROMPT_TOKEN_OVERHEAD: int = 100  # Overhead for system prompt

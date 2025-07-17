@@ -182,6 +182,25 @@ async def handle_command_intent(
         logger.warning("[COMMAND HANDLER OVERRIDE] User query contains 'archive' but command_name is 'SET_SILENCE_MODE'. Forcibly overriding to 'SET_ARCHIVE_MODE'.")
         command_name = "SET_ARCHIVE_MODE"
 
+    # Handle SET_RESPONSE_MODE as a protocol event for tone/mode switching
+    if command_name == "SET_RESPONSE_MODE":
+        mode = command_params.get("mode")
+        if mode in ("Architect", "Companion", "Director"):
+            event_schema = schemas.ProtocolEventCreate(
+                event_type="tone_mode",
+                details={
+                    "tone": mode,
+                    "trigger_query": user_query
+                },
+                active=True
+            )
+            create_protocol_event(db, event_schema)
+            logger.info(f"[COMMAND HANDLER] Set response mode to '{mode}' via protocol event.")
+            return f"Mode switched to {mode}.", None, llm_call_error_updated
+        else:
+            logger.warning(f"[COMMAND HANDLER] Invalid mode value for SET_RESPONSE_MODE: {mode}")
+            return f"Invalid mode: {mode}.", None, llm_call_error_updated
+
     logger.info(f"[COMMAND HANDLER] Final command_name to execute: '{command_name}' with params: {command_params}")
 
     if not command_name or command_name not in COMMAND_REGISTRY:
