@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Embedding Model (local, sentence-transformers)
     EMBEDDING_MODEL: str = os.getenv('EMBEDDING_MODEL', 'intfloat/e5-small-v2')
 
+    # OpenAI API (for Whisper and LLM)
+    OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', '')  # OpenAI API key for Whisper and LLM
+    OPENAI_WHISPER_MODEL: str = os.getenv('OPENAI_WHISPER_MODEL', 'whisper-1')  # Whisper model name
+
     class Config:
         env_file = ".env"
         env_file_encoding = 'utf-8'

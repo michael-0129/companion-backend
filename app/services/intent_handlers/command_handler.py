@@ -186,15 +186,28 @@ async def handle_command_intent(
     if command_name == "SET_RESPONSE_MODE":
         mode = command_params.get("mode")
         if mode in ("Architect", "Companion", "Director"):
-            event_schema = schemas.ProtocolEventCreate(
-                event_type="tone_mode",
-                details={
-                    "tone": mode,
-                    "trigger_query": user_query
-                },
-                active=True
-            )
-            create_protocol_event(db, event_schema)
+            from app.services.protocol import list_protocol_events, create_protocol_event
+            # Find existing active tone_mode event
+            previous_tone_events = list_protocol_events(db, event_type="tone_mode", active=True)
+            if previous_tone_events:
+                tone_event = previous_tone_events[0]
+                tone_event.details["tone"] = mode
+                tone_event.details["trigger_query"] = user_query
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(tone_event, "details")
+                tone_event.active = True
+                db.commit()
+                db.refresh(tone_event)
+            else:
+                event_schema = schemas.ProtocolEventCreate(
+                    event_type="tone_mode",
+                    details={
+                        "tone": mode,
+                        "trigger_query": user_query
+                    },
+                    active=True
+                )
+                create_protocol_event(db, event_schema)
             logger.info(f"[COMMAND HANDLER] Set response mode to '{mode}' via protocol event.")
             return f"Mode switched to {mode}.", None, llm_call_error_updated
         else:

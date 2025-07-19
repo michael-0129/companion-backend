@@ -149,7 +149,6 @@ async def handle_query_intent(
     else:
         tone_properties = system_prompts.TONE_PROPERTIES_ARCHITECT
     base_system_prompt = system_prompts.SYSTEM_PROMPT_ANSWER.format(tone_properties=tone_properties)
-
     # Prepare SYSTEM_PROMPT_ANSWER with directive injected at the top
     if latest_directive:
         # Truncate directive if too long (e.g., >512 chars)

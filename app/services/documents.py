@@ -25,6 +25,7 @@ import io
 from uuid import UUID
 import json
 from zoneinfo import ZoneInfo
+import docx
 
 from app import models, schemas
 from app.db.session import get_db
@@ -47,24 +48,51 @@ SUPPORTED_TEXT_EXTENSIONS = [
     ".css", ".scss", ".less", ".sql", ".sh", ".ps1", ".org"
 ]
 
-# System prompts for document analysis
-SYSTEM_PROMPT_EXTRACT_CONTENT = """You are an AI assistant specialized in analyzing documents and extracting key information.
-From the provided document text, please:
-1. Generate a concise overall summary of the document (2-4 sentences).
-2. Extract a list of key, self-contained facts, statements, or "memories". Each item in this list should be a distinct piece of information that can be understood on its own. Aim for 3-7 such items, depending on document length and density. If the document is very short or lacks distinct facts, it's okay to extract fewer or none.
+AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.mp4']
 
-Respond ONLY with a single, minified, valid JSON object. Do NOT include any explanatory text before or after the JSON object.
-The JSON object must have the following structure:
-{
-  "summary": "A concise summary of the document...",
-  "key_memories": [
-    "First key fact or statement.",
-    "Second key fact or statement.",
-    ...
-  ]
-}
-If no specific key memories can be extracted (e.g., the document is a poem or very abstract), provide an empty list for "key_memories".
-If the document text is empty or too short to analyze, you can return null for summary and an empty list for key_memories.
+# System prompts for document analysis
+SYSTEM_PROMPT_EXTRACT_CONTENT = """
+You are a protocol-aligned AI assistant for extracting memories from documents. The document may be text or a transcript from audio (e.g., speech-to-text). Transcription may be imperfect; handle unclear or incomplete speech by omitting ambiguous or incomplete memories.
+
+====================
+STRICT EXTRACTION RULES (PROTOCOL-ENFORCED)
+====================
+- Output MUST be a single, minified, valid JSON object. No extra text, no explanations, no formatting, no markdown, no code block.
+- The JSON object MUST have this exact structure and field order:
+  {{ "summary": "...", "key_memories": ["...", ...] }}
+- Each key memory MUST be a single, self-contained, context-free fact or statement. Do NOT paraphrase, summarize, or combine multiple facts.
+- For transcripts: Only extract speaker turns that are self-contained, clear, and unambiguous. Ignore greetings, filler, context-dependent, unclear, or incomplete utterances (e.g., due to poor transcription).
+- If no key memories can be extracted, return an empty list for key_memories.
+- If the document is empty or too short, return null for summary and an empty list for key_memories.
+- Any deviation from these rules is a protocol breach.
+
+====================
+EXAMPLES (CANONICAL)
+====================
+
+# Example 1: Text Document
+Document Text:
+Michael Lauria is the founder of the Companion project. The project began in 2023. Its goal is to create a mythic, relational AI. The first prototype was released in January 2024.
+Output:
+{{"summary":"Michael Lauria founded the Companion project in 2023 to create a mythic, relational AI. The first prototype was released in January 2024.","key_memories":["Michael Lauria is the founder of the Companion project.","The Companion project began in 2023.","The goal of the Companion project is to create a mythic, relational AI.","The first prototype was released in January 2024."]}}
+
+# Example 2: Audio Transcript (Monologue)
+Document Text:
+Michael: The project started last year. We wanted to build something mythic. My vision was to create an AI that feels like a real partner. I worked on it every day. The prototype was released in January.
+Output:
+{{"summary":"Michael describes starting the project last year to build a mythic AI that feels like a real partner. He worked daily and released the prototype in January.","key_memories":["The project started last year.","The goal was to build something mythic.","The vision is to create an AI that feels like a real partner.","Michael worked on it every day.","The prototype was released in January."]}}
+
+# Example 3: Audio Transcript (Monologue with unclear segment)
+Document Text:
+Michael: The project started last year. [inaudible] My vision was to create an AI that feels like a real partner. I worked on it every day.
+Output:
+{{"summary":"Michael describes starting the project last year and his vision to create an AI that feels like a real partner. He worked on it every day.","key_memories":["The project started last year.","The vision is to create an AI that feels like a real partner.","Michael worked on it every day."]}}
+
+# Example 4: Negative (No Extractable Memories)
+Document Text:
+Michael: Hello. [pause] Just testing.
+Output:
+{{"summary":"A brief greeting and test statement by Michael.","key_memories":[]}}
 
 Document Text:
 [[DOCUMENT_TEXT]]
@@ -212,23 +240,63 @@ async def create_document(
             details={"filename": filename}
         )
 
+async def transcribe_audio_with_whisper(file_path: str) -> str:
+    """
+    Transcribe audio file using OpenAI Whisper API.
+    """
+    import httpx
+    api_key = settings.OPENAI_API_KEY
+    model = getattr(settings, 'OPENAI_WHISPER_MODEL', 'whisper-1')
+    url = 'https://api.openai.com/v1/audio/transcriptions'
+    headers = {
+        'Authorization': f'Bearer {api_key}'
+    }
+    try:
+        with open(file_path, 'rb') as audio_file:
+            files = {'file': (os.path.basename(file_path), audio_file, 'application/octet-stream')}
+            data = {'model': model, 'response_format': 'text'}
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, data=data, files=files, timeout=120)
+                response.raise_for_status()
+                transcript = response.text.strip()
+                if not transcript:
+                    raise DocumentProcessingError(message='Whisper returned empty transcript', details={'file_path': file_path})
+                return transcript
+    except Exception as e:
+        raise DocumentProcessingError(message=f'Whisper transcription failed: {str(e)}', details={'file_path': file_path})
+
+async def extract_text_from_docx(file_path: str) -> str:
+    """
+    Extract text from a DOCX file using python-docx.
+    """
+    try:
+        doc = docx.Document(file_path)
+        return '\n'.join([para.text for para in doc.paragraphs if para.text.strip()])
+    except Exception as e:
+        raise DocumentProcessingError(
+            message=f"Failed to extract text from DOCX: {str(e)}",
+            details={"file_path": file_path}
+        )
+
 async def extract_text_from_document(file_path: str) -> str:
     """
-    Extract text content from a document based on its file type.
+    Extract text content from a document based on its file type, including audio transcription and docx support.
     """
     try:
         file_extension = os.path.splitext(file_path)[1].lower()
-        
         if file_extension == '.pdf':
             return await extract_text_from_pdf(file_path)
+        elif file_extension == '.docx':
+            return await extract_text_from_docx(file_path)
         elif file_extension in SUPPORTED_TEXT_EXTENSIONS:
             return await extract_text_from_text_file(file_path)
+        elif file_extension in AUDIO_EXTENSIONS:
+            return await transcribe_audio_with_whisper(file_path)
         else:
             raise DocumentProcessingError(
                 message=f"Unsupported file type: {file_extension}",
                 details={"file_path": file_path}
             )
-
     except DocumentProcessingError:
         raise
     except Exception as e:
